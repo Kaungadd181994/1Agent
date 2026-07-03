@@ -215,12 +215,14 @@ async function checkApksStatusColumn() {
     if (!error) {
       apksHasStatusColumn = true;
     } else {
-      console.warn('[Supabase Sync] "status" column verification failed, assuming column is missing:', error.message);
+      console.log('[Supabase Sync] "status" column is not present on "apks" table. Enabling backwards-compatibility mode.');
       apksHasStatusColumn = false;
     }
     apksHasStatusColumnChecked = true;
   } catch (e) {
-    console.warn('[Supabase Sync] Exception when verifying "status" column:', e);
+    console.log('[Supabase Sync] Exception during "status" column verification (assumed missing):', e);
+    apksHasStatusColumn = false;
+    apksHasStatusColumnChecked = true;
   }
   return apksHasStatusColumn;
 }
@@ -304,9 +306,9 @@ async function performTwoWaySync() {
         for (const localAgent of localData.agents) {
           const remoteAgent = remoteMap.get(localAgent.id);
           if (!remoteAgent) {
-            await supabase.from("agents").insert(localAgent);
+            await supabase.from("agents").upsert(localAgent, { onConflict: "code" });
           } else if (remoteAgent.code !== localAgent.code || remoteAgent.phone !== localAgent.phone || remoteAgent.name !== localAgent.name || remoteAgent.status !== localAgent.status) {
-            await supabase.from("agents").update(localAgent).eq("id", localAgent.id);
+            await supabase.from("agents").upsert(localAgent, { onConflict: "code" });
           }
         }
         for (const remoteAgent of remoteAgents || []) {
@@ -502,7 +504,7 @@ var db = {
     data.agents = agents;
     writeData(data);
     if (supabaseTableStatus.agents) {
-      supabase.from("agents").upsert(agents).then(({ error }) => {
+      supabase.from("agents").upsert(agents, { onConflict: "code" }).then(({ error }) => {
         if (error) console.error("[Supabase] Failed to bulk upsert agents:", error);
       });
     }
@@ -517,8 +519,8 @@ var db = {
     data.agents.push(newAgent);
     writeData(data);
     if (supabaseTableStatus.agents) {
-      supabase.from("agents").insert(newAgent).then(({ error }) => {
-        if (error) console.error("[Supabase] Failed to insert agent:", error);
+      supabase.from("agents").upsert(newAgent, { onConflict: "code" }).then(({ error }) => {
+        if (error) console.error("[Supabase] Failed to insert/upsert agent:", error);
       });
     }
     return newAgent;
@@ -990,7 +992,7 @@ app.delete("/api/admin/agents/:id", verifyAdminAuth, (req, res) => {
   });
   res.json({ success: true });
 });
-app.post("/api/admin/agents/import", verifyAdminAuth, uploadSheet.single("file"), (req, res) => {
+app.post(["/api/admin/agents/import", "/api/admin/agents/import-spreadsheet"], verifyAdminAuth, uploadSheet.single("file"), (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: "No spreadsheet file uploaded." });
   }
@@ -1061,6 +1063,11 @@ app.post("/api/admin/agents/import", verifyAdminAuth, uploadSheet.single("file")
     console.error("Import spreadsheet failed", error);
     res.status(500).json({ error: `Failed to parse spreadsheet: ${error.message}` });
   }
+});
+app.get("/api/admin/apks", verifyAdminAuth, (req, res) => {
+  const apks = db.getApks();
+  apks.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+  res.json(apks);
 });
 app.post("/api/admin/apks", verifyAdminAuth, uploadApk.single("file"), (req, res) => {
   const { name, version, description } = req.body;
