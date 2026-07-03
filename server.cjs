@@ -67,7 +67,8 @@ CREATE TABLE IF NOT EXISTS apks (
   description TEXT,
   "downloadsCount" INTEGER NOT NULL DEFAULT 0,
   "uploadedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  "allowOldVersions" BOOLEAN NOT NULL DEFAULT TRUE
+  "allowOldVersions" BOOLEAN NOT NULL DEFAULT TRUE,
+  status TEXT NOT NULL DEFAULT 'active'
 );
 
 -- 3. Operational Activity Logs Table
@@ -135,7 +136,8 @@ var defaultData = {
       // ~14.7 MB
       description: "Initial release of the official Agent Operations mobile application. Features agent reporting, task logging, and instant notification capabilities.",
       downloadsCount: 45,
-      uploadedAt: (/* @__PURE__ */ new Date("2026-06-25T11:00:00Z")).toISOString()
+      uploadedAt: (/* @__PURE__ */ new Date("2026-06-25T11:00:00Z")).toISOString(),
+      status: "active"
     },
     {
       id: "apk-2",
@@ -146,7 +148,8 @@ var defaultData = {
       // ~23.7 MB
       description: "Stable version of the Agent POS merchant terminal interface. Improved receipt layout, bluetooth printer pairing, and offline sales logging.",
       downloadsCount: 128,
-      uploadedAt: (/* @__PURE__ */ new Date("2026-06-30T15:45:00Z")).toISOString()
+      uploadedAt: (/* @__PURE__ */ new Date("2026-06-30T15:45:00Z")).toISOString(),
+      status: "active"
     }
   ],
   logs: [
@@ -203,6 +206,24 @@ var supabaseTableStatus = {
   lastSyncTime: null,
   syncError: null
 };
+var apksHasStatusColumnChecked = false;
+var apksHasStatusColumn = false;
+async function checkApksStatusColumn() {
+  if (apksHasStatusColumnChecked) return apksHasStatusColumn;
+  try {
+    const { error } = await supabase.from("apks").select("status").limit(1);
+    if (!error) {
+      apksHasStatusColumn = true;
+    } else {
+      console.warn('[Supabase Sync] "status" column verification failed, assuming column is missing:', error.message);
+      apksHasStatusColumn = false;
+    }
+    apksHasStatusColumnChecked = true;
+  } catch (e) {
+    console.warn('[Supabase Sync] Exception when verifying "status" column:', e);
+  }
+  return apksHasStatusColumn;
+}
 function readData() {
   try {
     if (!import_fs.default.existsSync(DB_FILE)) {
@@ -264,6 +285,7 @@ async function performTwoWaySync() {
   try {
     supabaseTableStatus.connected = true;
     supabaseTableStatus.syncError = null;
+    const hasStatusCol = await checkApksStatusColumn();
     const localData = readData();
     try {
       const { data: remoteAgents, error: agentsError } = await supabase.from("agents").select("*");
@@ -325,20 +347,34 @@ async function performTwoWaySync() {
         for (const localApk of localData.apks) {
           const remoteApk = remoteMap.get(localApk.id);
           if (!remoteApk) {
-            await supabase.from("apks").insert(localApk);
-          } else if (remoteApk.downloadsCount !== localApk.downloadsCount || remoteApk.allowOldVersions !== localApk.allowOldVersions || remoteApk.name !== localApk.name || remoteApk.version !== localApk.version || remoteApk.description !== localApk.description) {
-            await supabase.from("apks").update(localApk).eq("id", localApk.id);
+            const payload = { ...localApk };
+            if (!hasStatusCol) {
+              delete payload.status;
+            }
+            await supabase.from("apks").insert(payload);
+          } else if (remoteApk.downloadsCount !== localApk.downloadsCount || remoteApk.allowOldVersions !== localApk.allowOldVersions || remoteApk.name !== localApk.name || remoteApk.version !== localApk.version || remoteApk.description !== localApk.description || hasStatusCol && remoteApk.status !== localApk.status) {
+            const payload = { ...localApk };
+            if (!hasStatusCol) {
+              delete payload.status;
+            }
+            await supabase.from("apks").update(payload).eq("id", localApk.id);
           }
         }
         for (const remoteApk of remoteApks || []) {
           const localIdx = localData.apks.findIndex((a) => a.id === remoteApk.id);
           if (localIdx === -1) {
-            localData.apks.push(remoteApk);
+            localData.apks.push({
+              ...remoteApk,
+              status: remoteApk.status || "active"
+            });
             localModified = true;
           } else {
             const localApk = localData.apks[localIdx];
-            if (localApk.downloadsCount !== remoteApk.downloadsCount || localApk.allowOldVersions !== remoteApk.allowOldVersions || localApk.name !== remoteApk.name || localApk.version !== remoteApk.version || localApk.description !== remoteApk.description) {
-              localData.apks[localIdx] = remoteApk;
+            if (localApk.downloadsCount !== remoteApk.downloadsCount || localApk.allowOldVersions !== remoteApk.allowOldVersions || localApk.name !== remoteApk.name || localApk.version !== remoteApk.version || localApk.description !== remoteApk.description || hasStatusCol && localApk.status !== remoteApk.status) {
+              localData.apks[localIdx] = {
+                ...remoteApk,
+                status: remoteApk.status || localApk.status || "active"
+              };
               localModified = true;
             }
           }
@@ -528,16 +564,34 @@ var db = {
       ...apk,
       id: "apk-" + Date.now() + "-" + Math.floor(Math.random() * 1e3),
       downloadsCount: 0,
-      uploadedAt: (/* @__PURE__ */ new Date()).toISOString()
+      uploadedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      status: apk.status || "active"
     };
     data.apks.push(newApk);
     writeData(data);
     if (supabaseTableStatus.apks) {
-      supabase.from("apks").insert(newApk).then(({ error }) => {
+      const payload = { ...newApk };
+      if (!apksHasStatusColumn) {
+        delete payload.status;
+      }
+      supabase.from("apks").insert(payload).then(({ error }) => {
         if (error) console.error("[Supabase] Failed to insert APK:", error);
       });
     }
     return newApk;
+  },
+  updateApkStatus(id, status) {
+    const data = readData();
+    const apkIdx = data.apks.findIndex((a) => a.id === id);
+    if (apkIdx === -1) return null;
+    data.apks[apkIdx].status = status;
+    writeData(data);
+    if (supabaseTableStatus.apks && apksHasStatusColumn) {
+      supabase.from("apks").update({ status }).eq("id", id).then(({ error }) => {
+        if (error) console.error("[Supabase] Failed to update APK status:", error);
+      });
+    }
+    return data.apks[apkIdx];
   },
   deleteApk(id) {
     const data = readData();
@@ -683,13 +737,34 @@ var uploadSheet = (0, import_multer.default)({
   limits: { fileSize: 10 * 1024 * 1024 }
   // 10 MB limit
 });
-var verifyAdminAuth = (req, res, next) => {
+var verifyAdminAuth = async (req, res, next) => {
   const adminPassword = req.headers["x-admin-password"];
+  const authHeader = req.headers["authorization"];
   if (adminPassword === "Kaung1994") {
-    next();
-  } else {
-    res.status(401).json({ error: "Unauthorized: Invalid Admin Password" });
+    return next();
   }
+  let token = "";
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    token = authHeader.split(" ")[1];
+  } else if (typeof adminPassword === "string") {
+    token = adminPassword;
+  }
+  if (token === "Kaung1994") {
+    return next();
+  }
+  if (token) {
+    try {
+      const { data, error } = await supabase.auth.getUser(token);
+      if (!error && data?.user) {
+        if (data.user.email === "tartay.2200@gmail.com") {
+          return next();
+        }
+      }
+    } catch (err) {
+      console.error("[verifyAdminAuth] Supabase Token Verification failed:", err);
+    }
+  }
+  res.status(401).json({ error: "Unauthorized: Invalid Admin Password or Expired Session" });
 };
 app.post("/api/auth/login", (req, res) => {
   const { agentCode, phone } = req.body;
@@ -728,7 +803,7 @@ app.post("/api/auth/login", (req, res) => {
   res.json({ success: true, agent });
 });
 app.get("/api/apks", (req, res) => {
-  const apks = db.getApks();
+  const apks = db.getApks().filter((apk) => apk.status !== "inactive");
   const groups = {};
   for (const apk of apks) {
     const key = apk.name.trim().toLowerCase();
@@ -799,12 +874,33 @@ app.get("/api/agent/activity", (req, res) => {
   const logs = db.getLogs().filter((log) => log.agentCode === agent.code);
   res.json(logs);
 });
-app.post("/api/admin/login", (req, res) => {
-  const { password } = req.body;
-  if (password === "Kaung1994") {
-    res.json({ success: true });
-  } else {
-    res.status(401).json({ error: "Incorrect admin password" });
+app.post("/api/admin/login", async (req, res) => {
+  const { email, password } = req.body;
+  if (password === "Kaung1994" && (!email || email === "tartay.2200@gmail.com")) {
+    return res.json({ success: true, token: "Kaung1994", email: "tartay.2200@gmail.com" });
+  }
+  if (!email || !password) {
+    return res.status(400).json({ error: "Email and password are required" });
+  }
+  try {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password
+    });
+    if (error) {
+      return res.status(401).json({ error: error.message });
+    }
+    if (data?.session) {
+      return res.json({
+        success: true,
+        token: data.session.access_token,
+        email: data.user?.email || email
+      });
+    }
+    return res.status(401).json({ error: "Invalid admin credentials" });
+  } catch (err) {
+    console.error("[Supabase Auth Server] Login handler crashed:", err);
+    return res.status(500).json({ error: "Server authentication process encountered an error" });
   }
 });
 app.get("/api/admin/supabase-status", verifyAdminAuth, (req, res) => {
@@ -1021,6 +1117,22 @@ app.delete("/api/admin/apks/:id", verifyAdminAuth, (req, res) => {
     details: `Admin deleted APK: "${apk.name}" version ${apk.version}.`
   });
   res.json({ success: true });
+});
+app.put("/api/admin/apks/:id/status", verifyAdminAuth, (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+  if (status !== "active" && status !== "inactive") {
+    return res.status(400).json({ error: "Status must be active or inactive." });
+  }
+  const updated = db.updateApkStatus(id, status);
+  if (!updated) {
+    return res.status(404).json({ error: "APK file record not found." });
+  }
+  db.addLog({
+    type: "apk_uploaded",
+    details: `Admin changed status of APK "${updated.name}" version ${updated.version} to ${status}.`
+  });
+  res.json(updated);
 });
 app.post("/api/admin/system-updates", verifyAdminAuth, (req, res) => {
   const { title, description, version } = req.body;
