@@ -17,6 +17,7 @@ export interface ApkFile {
   downloadsCount: number;
   uploadedAt: string;
   allowOldVersions?: boolean;
+  status?: 'active' | 'inactive';
 }
 
 export interface ActivityLog {

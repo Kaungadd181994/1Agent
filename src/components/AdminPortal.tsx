@@ -118,6 +118,7 @@ export default function AdminPortal({ adminPassword, onLogout }: AdminPortalProp
 
   const headers = {
     'x-admin-password': adminPassword,
+    'Authorization': `Bearer ${adminPassword}`,
     'Content-Type': 'application/json'
   };
 
@@ -433,7 +434,8 @@ export default function AdminPortal({ adminPassword, onLogout }: AdminPortalProp
       const res = await fetch('/api/admin/apks', {
         method: 'POST',
         headers: {
-          'x-admin-password': adminPassword
+          'x-admin-password': adminPassword,
+          'Authorization': `Bearer ${adminPassword}`
         },
         body: formData
       });
@@ -477,6 +479,27 @@ export default function AdminPortal({ adminPassword, onLogout }: AdminPortalProp
       }
     } catch (err) {
       console.error('Error deleting APK:', err);
+    }
+  };
+
+  const handleToggleApkStatus = async (id: string, currentStatus?: 'active' | 'inactive') => {
+    const nextStatus = currentStatus === 'inactive' ? 'active' : 'inactive';
+    try {
+      const res = await fetch(`/api/admin/apks/${id}/status`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ status: nextStatus })
+      });
+
+      if (res.ok) {
+        fetchApks();
+        fetchStats();
+      } else {
+        const errData = await res.json();
+        alert(errData.error || 'Failed to update APK status.');
+      }
+    } catch (err) {
+      console.error('Error toggling APK status:', err);
     }
   };
 
@@ -1175,16 +1198,29 @@ export default function AdminPortal({ adminPassword, onLogout }: AdminPortalProp
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {apks.map((apk) => (
-                  <div key={apk.id} className="bg-white border border-slate-200/85 rounded-xl p-5 flex flex-col justify-between">
+                  <div key={apk.id} className="bg-white border border-[#e4e6eb] rounded-xl p-5 flex flex-col justify-between shadow-sm hover:border-[#ccd0d5] transition-all duration-150">
                     <div>
                       <div className="flex items-start justify-between">
-                        <span className="bg-slate-100 border border-slate-200 px-2 py-0.5 rounded text-[10px] font-bold font-mono text-slate-700">
+                        <span className="bg-[#e7f3ff] text-[#1877F2] border border-transparent px-2 py-0.5 rounded text-[10px] font-bold font-mono">
                           v{apk.version}
                         </span>
                         <div className="flex items-center space-x-1.5">
+                          {/* Active/Inactive toggler button */}
+                          <button
+                            onClick={() => handleToggleApkStatus(apk.id, apk.status)}
+                            className={`px-2 py-0.5 text-[10px] font-bold rounded-lg border cursor-pointer transition-all ${
+                              apk.status === 'inactive'
+                                ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'
+                                : 'bg-[#e7f3ff] text-[#1877F2] border-transparent hover:bg-blue-100'
+                            }`}
+                            title={`Toggle version availability. Currently: ${apk.status || 'active'}`}
+                          >
+                            {(apk.status || 'active') === 'active' ? 'Active' : 'Inactive'}
+                          </button>
+
                           <button
                             onClick={() => handleDeleteApk(apk.id, apk.name)}
-                            className="p-1.5 text-slate-400 hover:text-red-650 hover:bg-slate-100 rounded-lg transition-colors border border-slate-200 cursor-pointer"
+                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-slate-100 rounded-lg transition-colors border border-slate-200 cursor-pointer"
                             title="Wipe binary package"
                           >
                             <Trash2 size={13} />
@@ -1200,7 +1236,7 @@ export default function AdminPortal({ adminPassword, onLogout }: AdminPortalProp
                       </p>
                     </div>
 
-                    <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between text-[10px] font-mono text-slate-500">
+                    <div className="mt-5 pt-4 border-t border-[#e4e6eb] flex items-center justify-between text-[10px] font-mono text-[#65676b]">
                       <div className="flex flex-col gap-0.5">
                         <span>Size: {formatBytes(apk.size)}</span>
                         <span>Date: {formatDate(apk.uploadedAt)}</span>
@@ -1209,8 +1245,8 @@ export default function AdminPortal({ adminPassword, onLogout }: AdminPortalProp
                         </span>
                       </div>
 
-                      <div className="flex items-center space-x-1 bg-slate-100 text-slate-700 font-bold px-2 py-1 rounded border border-slate-200 text-[10px]">
-                        <Download size={10} />
+                      <div className="flex items-center space-x-1 bg-[#F0F2F5] text-[#1c1e21] font-bold px-2 py-1 rounded-lg border border-[#e4e6eb] text-[10px]">
+                        <Download size={10} className="text-[#1877F2]" />
                         <span>{apk.downloadsCount} dl</span>
                       </div>
                     </div>

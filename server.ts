@@ -5,7 +5,7 @@ import { createServer as createViteServer } from 'vite';
 import multer from 'multer';
 import * as xlsx from 'xlsx';
 import { db, initDb, supabaseTableStatus, performTwoWaySync } from './src/server/db.js';
-import { SUPABASE_SCHEMA_SQL } from './src/server/supabase.js';
+import { supabase, SUPABASE_SCHEMA_SQL } from './src/server/supabase.js';
 import { Agent, ApkFile } from './src/types.js';
 
 // Initialize the database and data folders
@@ -44,13 +44,40 @@ const uploadSheet = multer({
 });
 
 // Helper for admin authentication check
-const verifyAdminAuth = (req: Request, res: Response, next: () => void) => {
+const verifyAdminAuth = async (req: Request, res: Response, next: () => void) => {
   const adminPassword = req.headers['x-admin-password'];
+  const authHeader = req.headers['authorization'];
+
   if (adminPassword === 'Kaung1994') {
-    next();
-  } else {
-    res.status(401).json({ error: 'Unauthorized: Invalid Admin Password' });
+    return next();
   }
+
+  let token = '';
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.split(' ')[1];
+  } else if (typeof adminPassword === 'string') {
+    token = adminPassword;
+  }
+
+  if (token === 'Kaung1994') {
+    return next();
+  }
+
+  if (token) {
+    try {
+      const { data, error } = await supabase.auth.getUser(token);
+      if (!error && data?.user) {
+        // Double check email is the allowed admin email
+        if (data.user.email === 'tartay.2200@gmail.com') {
+          return next();
+        }
+      }
+    } catch (err) {
+      console.error('[verifyAdminAuth] Supabase Token Verification failed:', err);
+    }
+  }
+
+  res.status(401).json({ error: 'Unauthorized: Invalid Admin Password or Expired Session' });
 };
 
 // ==========================================
@@ -104,7 +131,7 @@ app.post('/api/auth/login', (req: Request, res: Response) => {
 
 // 2. List available APK files
 app.get('/api/apks', (req: Request, res: Response) => {
-  const apks = db.getApks();
+  const apks = db.getApks().filter(apk => apk.status !== 'inactive');
   
   // Group by application name (case-insensitive) to control showing old versions
   const groups: { [name: string]: typeof apks } = {};
@@ -215,13 +242,41 @@ app.get('/api/agent/activity', (req: Request, res: Response) => {
 // ADMIN DASHBOARD ENDPOINTS (PROTECTED)
 // ==========================================
 
-// 1. Admin login verification
-app.post('/api/admin/login', (req: Request, res: Response) => {
-  const { password } = req.body;
-  if (password === 'Kaung1994') {
-    res.json({ success: true });
-  } else {
-    res.status(401).json({ error: 'Incorrect admin password' });
+// 1. Admin login verification with Supabase Authentication support
+app.post('/api/admin/login', async (req: Request, res: Response) => {
+  const { email, password } = req.body;
+
+  // Support offline bypass fallback if credentials aren't provided or match traditional keys
+  if (password === 'Kaung1994' && (!email || email === 'tartay.2200@gmail.com')) {
+    return res.json({ success: true, token: 'Kaung1994', email: 'tartay.2200@gmail.com' });
+  }
+
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password are required' });
+  }
+
+  try {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password
+    });
+
+    if (error) {
+      return res.status(401).json({ error: error.message });
+    }
+
+    if (data?.session) {
+      return res.json({
+        success: true,
+        token: data.session.access_token,
+        email: data.user?.email || email
+      });
+    }
+
+    return res.status(401).json({ error: 'Invalid admin credentials' });
+  } catch (err: any) {
+    console.error('[Supabase Auth Server] Login handler crashed:', err);
+    return res.status(500).json({ error: 'Server authentication process encountered an error' });
   }
 });
 
@@ -500,6 +555,28 @@ app.delete('/api/admin/apks/:id', verifyAdminAuth, (req: Request, res: Response)
   });
 
   res.json({ success: true });
+});
+
+// 9b. Toggle APK status (active vs inactive)
+app.put('/api/admin/apks/:id/status', verifyAdminAuth, (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { status } = req.body;
+
+  if (status !== 'active' && status !== 'inactive') {
+    return res.status(400).json({ error: 'Status must be active or inactive.' });
+  }
+
+  const updated = db.updateApkStatus(id, status);
+  if (!updated) {
+    return res.status(404).json({ error: 'APK file record not found.' });
+  }
+
+  db.addLog({
+    type: 'apk_uploaded',
+    details: `Admin changed status of APK "${updated.name}" version ${updated.version} to ${status}.`
+  });
+
+  res.json(updated);
 });
 
 // 10. Post System Update

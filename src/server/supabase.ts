@@ -76,7 +76,8 @@ CREATE TABLE IF NOT EXISTS apks (
   description TEXT,
   "downloadsCount" INTEGER NOT NULL DEFAULT 0,
   "uploadedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  "allowOldVersions" BOOLEAN NOT NULL DEFAULT TRUE
+  "allowOldVersions" BOOLEAN NOT NULL DEFAULT TRUE,
+  status TEXT NOT NULL DEFAULT 'active'
 );
 
 -- 3. Operational Activity Logs Table

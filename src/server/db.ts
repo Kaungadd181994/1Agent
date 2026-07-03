@@ -50,7 +50,8 @@ const defaultData: Schema = {
       size: 15420000, // ~14.7 MB
       description: 'Initial release of the official Agent Operations mobile application. Features agent reporting, task logging, and instant notification capabilities.',
       downloadsCount: 45,
-      uploadedAt: new Date('2026-06-25T11:00:00Z').toISOString()
+      uploadedAt: new Date('2026-06-25T11:00:00Z').toISOString(),
+      status: 'active'
     },
     {
       id: 'apk-2',
@@ -60,7 +61,8 @@ const defaultData: Schema = {
       size: 24850000, // ~23.7 MB
       description: 'Stable version of the Agent POS merchant terminal interface. Improved receipt layout, bluetooth printer pairing, and offline sales logging.',
       downloadsCount: 128,
-      uploadedAt: new Date('2026-06-30T15:45:00Z').toISOString()
+      uploadedAt: new Date('2026-06-30T15:45:00Z').toISOString(),
+      status: 'active'
     }
   ],
   logs: [
@@ -119,6 +121,27 @@ export const supabaseTableStatus = {
   lastSyncTime: null as string | null,
   syncError: null as string | null
 };
+
+// Cache and helper to dynamically verify if 'status' column is present in the Supabase 'apks' table
+let apksHasStatusColumnChecked = false;
+let apksHasStatusColumn = false;
+
+async function checkApksStatusColumn() {
+  if (apksHasStatusColumnChecked) return apksHasStatusColumn;
+  try {
+    const { error } = await supabase.from('apks').select('status').limit(1);
+    if (!error) {
+      apksHasStatusColumn = true;
+    } else {
+      console.warn('[Supabase Sync] "status" column verification failed, assuming column is missing:', error.message);
+      apksHasStatusColumn = false;
+    }
+    apksHasStatusColumnChecked = true;
+  } catch (e) {
+    console.warn('[Supabase Sync] Exception when verifying "status" column:', e);
+  }
+  return apksHasStatusColumn;
+}
 
 // Local read/write
 function readData(): Schema {
@@ -195,6 +218,8 @@ export async function performTwoWaySync() {
   try {
     supabaseTableStatus.connected = true;
     supabaseTableStatus.syncError = null;
+
+    const hasStatusCol = await checkApksStatusColumn();
 
     const localData = readData();
 
@@ -282,22 +307,34 @@ export async function performTwoWaySync() {
         for (const localApk of localData.apks) {
           const remoteApk = remoteMap.get(localApk.id);
           if (!remoteApk) {
-            await supabase.from('apks').insert(localApk);
+            const payload = { ...localApk };
+            if (!hasStatusCol) {
+              delete payload.status;
+            }
+            await supabase.from('apks').insert(payload);
           } else if (
             remoteApk.downloadsCount !== localApk.downloadsCount ||
             remoteApk.allowOldVersions !== localApk.allowOldVersions ||
             remoteApk.name !== localApk.name ||
             remoteApk.version !== localApk.version ||
-            remoteApk.description !== localApk.description
+            remoteApk.description !== localApk.description ||
+            (hasStatusCol && remoteApk.status !== localApk.status)
           ) {
-            await supabase.from('apks').update(localApk).eq('id', localApk.id);
+            const payload = { ...localApk };
+            if (!hasStatusCol) {
+              delete payload.status;
+            }
+            await supabase.from('apks').update(payload).eq('id', localApk.id);
           }
         }
 
         for (const remoteApk of (remoteApks || [])) {
           const localIdx = localData.apks.findIndex(a => a.id === remoteApk.id);
           if (localIdx === -1) {
-            localData.apks.push(remoteApk);
+            localData.apks.push({
+              ...remoteApk,
+              status: remoteApk.status || 'active'
+            });
             localModified = true;
           } else {
             const localApk = localData.apks[localIdx];
@@ -306,9 +343,13 @@ export async function performTwoWaySync() {
               localApk.allowOldVersions !== remoteApk.allowOldVersions ||
               localApk.name !== remoteApk.name ||
               localApk.version !== remoteApk.version ||
-              localApk.description !== remoteApk.description
+              localApk.description !== remoteApk.description ||
+              (hasStatusCol && localApk.status !== remoteApk.status)
             ) {
-              localData.apks[localIdx] = remoteApk;
+              localData.apks[localIdx] = {
+                ...remoteApk,
+                status: remoteApk.status || localApk.status || 'active'
+              };
               localModified = true;
             }
           }
@@ -536,19 +577,42 @@ export const db = {
       ...apk,
       id: 'apk-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
       downloadsCount: 0,
-      uploadedAt: new Date().toISOString()
+      uploadedAt: new Date().toISOString(),
+      status: apk.status || 'active'
     };
     data.apks.push(newApk);
     writeData(data);
 
     // Non-blocking upload to Supabase
     if (supabaseTableStatus.apks) {
-      supabase.from('apks').insert(newApk).then(({ error }) => {
+      const payload = { ...newApk };
+      if (!apksHasStatusColumn) {
+        delete payload.status;
+      }
+      supabase.from('apks').insert(payload).then(({ error }) => {
         if (error) console.error('[Supabase] Failed to insert APK:', error);
       });
     }
 
     return newApk;
+  },
+
+  updateApkStatus(id: string, status: 'active' | 'inactive'): ApkFile | null {
+    const data = readData();
+    const apkIdx = data.apks.findIndex(a => a.id === id);
+    if (apkIdx === -1) return null;
+    
+    data.apks[apkIdx].status = status;
+    writeData(data);
+
+    // Non-blocking update to Supabase
+    if (supabaseTableStatus.apks && apksHasStatusColumn) {
+      supabase.from('apks').update({ status }).eq('id', id).then(({ error }) => {
+        if (error) console.error('[Supabase] Failed to update APK status:', error);
+      });
+    }
+
+    return data.apks[apkIdx];
   },
 
   deleteApk(id: string): boolean {

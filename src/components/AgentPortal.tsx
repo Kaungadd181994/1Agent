@@ -92,25 +92,25 @@ export default function AgentPortal({ agent, onLogout }: AgentPortalProps) {
   };
 
   return (
-    <div id="agent-portal-root" className="min-h-screen bg-slate-50 text-slate-800 flex flex-col antialiased">
+    <div id="agent-portal-root" className="min-h-screen bg-[#F0F2F5] text-[#1c1e21] flex flex-col antialiased">
       
       {/* Header Bar - Full Width, Edge to Edge */}
-      <header id="agent-header" className="bg-white border-b border-slate-200/80 sticky top-0 z-40">
-        <div className="w-full px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <header id="agent-header" className="bg-white border-b border-[#e4e6eb] sticky top-0 z-40">
+        <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="bg-slate-900 text-white p-2 rounded-xl flex items-center justify-center">
-              <Smartphone size={20} />
+            <div className="bg-[#1877F2] text-white p-2 rounded-full flex items-center justify-center">
+              <Smartphone size={18} />
             </div>
             <div>
-              <h1 className="font-display font-bold text-base tracking-tight text-slate-900 leading-none">Agent Portal</h1>
-              <p className="text-[10px] text-slate-500 font-mono mt-0.5">Secure Binaries Center</p>
+              <h1 className="font-sans font-bold text-base tracking-tight text-[#1c1e21] leading-none">Agent Portal</h1>
+              <p className="text-[10px] text-[#65676b] font-mono mt-0.5">Secure Binaries Center</p>
             </div>
           </div>
 
           <button
             id="btn-logout"
             onClick={onLogout}
-            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 transition-colors text-xs font-semibold cursor-pointer"
+            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-[#ccd0d5] hover:bg-[#F0F2F5] text-[#65676b] hover:text-[#1c1e21] transition-colors text-xs font-bold cursor-pointer animate-fade-in"
           >
             <LogOut size={14} />
             <span>Sign Out</span>
@@ -119,27 +119,27 @@ export default function AgentPortal({ agent, onLogout }: AgentPortalProps) {
       </header>
 
       {/* Main Container - Responsive & Edge to Edge on Mobile */}
-      <main className="flex-1 w-full max-w-full px-0 sm:px-6 lg:px-8 py-0 sm:py-6 flex flex-col gap-4">
+      <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col gap-4">
         
         {/* Agent Information Header Block - Almost Flat, Less Shadow */}
-        <div className="bg-white border-y sm:border border-slate-200/80 sm:rounded-2xl p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="bg-white border border-[#e4e6eb] rounded-xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
           <div className="flex items-center space-x-4">
-            <div className="p-2.5 bg-slate-100 text-slate-700 rounded-xl border border-slate-200">
+            <div className="p-2.5 bg-[#e7f3ff] text-[#1877F2] rounded-full">
               <User size={20} />
             </div>
             <div>
-              <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/50 mb-1">
+              <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-[#e7f3ff] text-[#1877F2] mb-1">
                 Verified Agent Connected
               </span>
-              <h2 className="font-display font-bold text-lg text-slate-900 leading-tight">{agent.name}</h2>
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1 text-xs text-slate-500">
+              <h2 className="font-sans font-bold text-lg text-[#1c1e21] leading-tight">{agent.name}</h2>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1 text-xs text-[#65676b]">
                 <span className="flex items-center space-x-1">
-                  <span className="font-semibold text-slate-400 font-mono text-[10px]">Code:</span>
-                  <span className="bg-slate-100 border border-slate-200 px-1.5 py-0.2 rounded text-[10px] font-mono font-bold text-slate-800">{agent.code}</span>
+                  <span className="font-semibold text-[#65676b] font-mono text-[10px]">Code:</span>
+                  <span className="bg-[#F0F2F5] border border-[#e4e6eb] px-1.5 py-0.2 rounded text-[10px] font-mono font-bold text-[#1c1e21]">{agent.code}</span>
                 </span>
-                <span className="text-slate-300">|</span>
+                <span className="text-[#ccd0d5]">|</span>
                 <span className="flex items-center space-x-1 font-mono text-[11px]">
-                  <Phone size={11} className="text-slate-400" />
+                  <Phone size={11} className="text-[#65676b]" />
                   <span>{agent.phone}</span>
                 </span>
               </div>
@@ -148,41 +148,41 @@ export default function AgentPortal({ agent, onLogout }: AgentPortalProps) {
           
           <button
             onClick={fetchApks}
-            className="self-end sm:self-center flex items-center space-x-1 px-3 py-1.5 text-xs text-slate-500 hover:text-slate-800 border border-slate-200 rounded-xl bg-white hover:bg-slate-50 font-semibold cursor-pointer"
+            className="self-end sm:self-center flex items-center space-x-1 px-3 py-1.5 text-xs text-[#65676b] hover:text-[#1c1e21] border border-[#ccd0d5] rounded-lg bg-white hover:bg-[#F0F2F5] font-bold cursor-pointer transition-colors"
           >
-            <RefreshCw size={12} className={loadingApks ? "animate-spin" : ""} />
+            <RefreshCw size={12} className={loadingApks ? "animate-spin text-[#1877F2]" : ""} />
             <span>Reload Repository</span>
           </button>
         </div>
 
         {error && (
-          <div className="mx-4 sm:mx-0 p-4 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl flex items-start space-x-2">
-            <AlertCircle size={15} className="shrink-0 mt-0.5 text-red-500" />
+          <div className="p-4 bg-[#ffebe9] border border-[#ffc4c0] text-[#b30000] text-xs rounded-xl flex items-start space-x-2">
+            <AlertCircle size={15} className="shrink-0 mt-0.5 text-[#ff4d4d]" />
             <span className="leading-relaxed font-medium">{error}</span>
           </div>
         )}
 
         {/* Centralized APK Catalog (No tabs, just clean application cards list!) */}
-        <div className="px-4 sm:px-0 flex-1">
+        <div className="flex-1">
           <div className="flex items-center justify-between mb-4 mt-2">
-            <h3 className="font-display font-bold text-sm uppercase tracking-wider text-slate-500">
+            <h3 className="font-sans font-bold text-xs uppercase tracking-wider text-[#65676b]">
               Available Binaries
             </h3>
-            <span className="text-xs text-slate-500 font-mono font-bold">
+            <span className="text-xs text-[#65676b] font-mono font-bold">
               {apks.length} {apks.length === 1 ? 'Package' : 'Packages'}
             </span>
           </div>
 
           {loadingApks ? (
-            <div className="bg-white border border-slate-200/80 rounded-2xl py-20 flex flex-col items-center justify-center text-center">
-              <RefreshCw className="animate-spin text-slate-400 mb-3" size={28} />
-              <p className="text-xs text-slate-500 font-medium">Streaming secure app catalogues...</p>
+            <div className="bg-white border border-[#e4e6eb] rounded-xl py-20 flex flex-col items-center justify-center text-center shadow-sm">
+              <RefreshCw className="animate-spin text-[#1877F2] mb-3" size={28} />
+              <p className="text-xs text-[#65676b] font-medium">Streaming secure app catalogues...</p>
             </div>
           ) : apks.length === 0 ? (
-            <div className="bg-white border border-slate-200/80 rounded-2xl py-16 text-center px-6">
-              <Download className="mx-auto text-slate-300 mb-3" size={36} />
-              <h4 className="font-display font-semibold text-sm text-slate-800">No Mobile Binaries Distributed</h4>
-              <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
+            <div className="bg-white border border-[#e4e6eb] rounded-xl py-16 text-center px-6 shadow-sm">
+              <Download className="mx-auto text-[#ccd0d5] mb-3" size={36} />
+              <h4 className="font-sans font-bold text-sm text-[#1c1e21]">No Mobile Binaries Distributed</h4>
+              <p className="text-xs text-[#65676b] mt-1 max-w-xs mx-auto">
                 Operational files are being updated. Check back shortly or contact administration.
               </p>
             </div>
@@ -193,50 +193,50 @@ export default function AgentPortal({ agent, onLogout }: AgentPortalProps) {
                   key={apk.id}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  className="bg-white border border-slate-200/80 sm:rounded-2xl p-5 flex flex-col justify-between hover:border-slate-350 transition-all duration-150 relative"
+                  className="bg-white border border-[#e4e6eb] rounded-xl p-5 flex flex-col justify-between hover:border-[#ccd0d5] hover:shadow-md transition-all duration-150 relative shadow-sm"
                 >
                   <div>
                     <div className="flex items-start justify-between">
-                      <div className="bg-slate-100 text-slate-800 border border-slate-200 w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xs font-mono">
+                      <div className="bg-[#e7f3ff] text-[#1877F2] w-10 h-10 rounded-lg flex items-center justify-center font-bold text-xs font-mono">
                         APK
                       </div>
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-slate-900 text-white font-mono">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-[#1877F2] text-white font-mono">
                         v{apk.version}
                       </span>
                     </div>
 
-                    <h4 className="font-display font-bold text-base text-slate-900 mt-3.5">
+                    <h4 className="font-sans font-bold text-base text-[#1c1e21] mt-3.5">
                       {apk.name}
                     </h4>
                     
-                    <p className="text-[10px] text-slate-400 font-mono mt-0.5 select-all">
+                    <p className="text-[10px] text-[#8d949e] font-mono mt-0.5 select-all">
                       {apk.filename}
                     </p>
 
-                    <p className="text-xs text-slate-600 mt-3.5 leading-relaxed whitespace-pre-wrap">
+                    <p className="text-xs text-[#65676b] mt-3.5 leading-relaxed whitespace-pre-wrap">
                       {apk.description || "No specific release instructions provided."}
                     </p>
                   </div>
 
-                  <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
+                  <div className="mt-5 pt-4 border-t border-[#e4e6eb] flex items-center justify-between">
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-[10px] text-slate-400 font-mono">Size: {formatBytes(apk.size)}</span>
-                      <span className="text-[10px] text-slate-400 font-mono">Date: {formatDate(apk.uploadedAt)}</span>
+                      <span className="text-[10px] text-[#65676b] font-mono">Size: {formatBytes(apk.size)}</span>
+                      <span className="text-[10px] text-[#65676b] font-mono">Date: {formatDate(apk.uploadedAt)}</span>
                     </div>
 
                     <button
                       id={`btn-download-${apk.id}`}
                       onClick={() => handleDownload(apk)}
                       disabled={downloadingId !== null}
-                      className={`flex items-center space-x-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      className={`flex items-center space-x-1.5 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-none ${
                         downloadingId === apk.id
-                          ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
-                          : 'bg-slate-900 text-white hover:bg-slate-800 active:scale-97'
+                          ? 'bg-[#F0F2F5] text-[#8d949e] border border-[#ccd0d5] cursor-not-allowed'
+                          : 'bg-[#1877F2] text-white hover:bg-[#166FE5] active:scale-97'
                       }`}
                     >
                       {downloadingId === apk.id ? (
                         <>
-                          <RefreshCw size={12} className="animate-spin" />
+                          <RefreshCw size={12} className="animate-spin text-[#1877F2]" />
                           <span>Preparing...</span>
                         </>
                       ) : (
@@ -256,10 +256,10 @@ export default function AgentPortal({ agent, onLogout }: AgentPortalProps) {
       </main>
 
       {/* Footer */}
-      <footer className="bg-white border-t border-slate-200/80 py-5 text-center text-[10px] text-slate-400 font-mono">
+      <footer className="bg-white border-t border-[#e4e6eb] py-5 text-center text-[10px] text-[#65676b] font-mono">
         <div className="w-full px-4">
           <p>© 2026 Agent APK Portal. Authorized operational channels only.</p>
-          <p className="mt-0.5 text-slate-350">Handshake authentication and download events are encrypted and logged.</p>
+          <p className="mt-0.5 text-[#8d949e]">Handshake authentication and download events are encrypted and logged.</p>
         </div>
       </footer>
     </div>
