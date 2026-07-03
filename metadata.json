@@ -1,0 +1,6 @@
+{
+  "name": "Agent APK Download Portal",
+  "description": "An APK download portal with agent authentication (agent code & phone number), download history tracking, agent CRUD, Excel list upload, and admin log monitoring.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
