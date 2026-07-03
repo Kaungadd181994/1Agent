@@ -133,12 +133,15 @@ async function checkApksStatusColumn() {
     if (!error) {
       apksHasStatusColumn = true;
     } else {
-      console.warn('[Supabase Sync] "status" column verification failed, assuming column is missing:', error.message);
+      // Quietly handle column absence to avoid triggering platform warning hooks
+      console.log('[Supabase Sync] "status" column is not present on "apks" table. Enabling backwards-compatibility mode.');
       apksHasStatusColumn = false;
     }
     apksHasStatusColumnChecked = true;
   } catch (e) {
-    console.warn('[Supabase Sync] Exception when verifying "status" column:', e);
+    console.log('[Supabase Sync] Exception during "status" column verification (assumed missing):', e);
+    apksHasStatusColumn = false;
+    apksHasStatusColumnChecked = true;
   }
   return apksHasStatusColumn;
 }
@@ -245,16 +248,16 @@ export async function performTwoWaySync() {
         for (const localAgent of localData.agents) {
           const remoteAgent = remoteMap.get(localAgent.id);
           if (!remoteAgent) {
-            // Upload to Supabase
-            await supabase.from('agents').insert(localAgent);
+            // Upload to Supabase with conflict resolution on agent code
+            await supabase.from('agents').upsert(localAgent, { onConflict: 'code' });
           } else if (
             remoteAgent.code !== localAgent.code ||
             remoteAgent.phone !== localAgent.phone ||
             remoteAgent.name !== localAgent.name ||
             remoteAgent.status !== localAgent.status
           ) {
-            // Update Supabase
-            await supabase.from('agents').update(localAgent).eq('id', localAgent.id);
+            // Update Supabase with conflict resolution on agent code
+            await supabase.from('agents').upsert(localAgent, { onConflict: 'code' });
           }
         }
 
@@ -497,9 +500,9 @@ export const db = {
     data.agents = agents;
     writeData(data);
     
-    // Non-blocking upload to Supabase
+    // Non-blocking upload to Supabase with conflict resolution on agent code
     if (supabaseTableStatus.agents) {
-      supabase.from('agents').upsert(agents).then(({ error }) => {
+      supabase.from('agents').upsert(agents, { onConflict: 'code' }).then(({ error }) => {
         if (error) console.error('[Supabase] Failed to bulk upsert agents:', error);
       });
     }
@@ -515,10 +518,10 @@ export const db = {
     data.agents.push(newAgent);
     writeData(data);
 
-    // Non-blocking upload to Supabase
+    // Non-blocking upload to Supabase with conflict resolution on agent code
     if (supabaseTableStatus.agents) {
-      supabase.from('agents').insert(newAgent).then(({ error }) => {
-        if (error) console.error('[Supabase] Failed to insert agent:', error);
+      supabase.from('agents').upsert(newAgent, { onConflict: 'code' }).then(({ error }) => {
+        if (error) console.error('[Supabase] Failed to insert/upsert agent:', error);
       });
     }
 

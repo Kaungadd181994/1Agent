@@ -397,7 +397,7 @@ app.delete('/api/admin/agents/:id', verifyAdminAuth, (req: Request, res: Respons
 });
 
 // 7. Bulk Import Agents via Excel (.xlsx / .csv)
-app.post('/api/admin/agents/import', verifyAdminAuth, uploadSheet.single('file'), (req: Request, res: Response) => {
+app.post(['/api/admin/agents/import', '/api/admin/agents/import-spreadsheet'], verifyAdminAuth, uploadSheet.single('file'), (req: Request, res: Response) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No spreadsheet file uploaded.' });
   }
@@ -486,6 +486,14 @@ app.post('/api/admin/agents/import', verifyAdminAuth, uploadSheet.single('file')
     console.error('Import spreadsheet failed', error);
     res.status(500).json({ error: `Failed to parse spreadsheet: ${error.message}` });
   }
+});
+
+// 7b. GET all APK files (Admin)
+app.get('/api/admin/apks', verifyAdminAuth, (req: Request, res: Response) => {
+  const apks = db.getApks();
+  // Sort apks descending by uploadedAt
+  apks.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+  res.json(apks);
 });
 
 // 8. Upload New APK File

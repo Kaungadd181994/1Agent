@@ -25,6 +25,23 @@ import {
   Server
 } from 'lucide-react';
 import { Agent, ApkFile, ActivityLog, SystemUpdate, DashboardStats } from '../types';
+import { 
+  getStats, 
+  getAgents, 
+  addAgent, 
+  toggleAgentStatus, 
+  deleteAgent, 
+  getApks, 
+  addApk, 
+  deleteApk, 
+  toggleApkStatus, 
+  getSystemUpdates, 
+  addSystemUpdate, 
+  deleteSystemUpdate, 
+  getLogs, 
+  clearLogs, 
+  isServerlessMode 
+} from '../apiClient';
 
 interface AdminPortalProps {
   adminPassword: string;
@@ -114,6 +131,9 @@ export default function AdminPortal({ adminPassword, onLogout }: AdminPortalProp
   // Logs filters & detail modal
   const [logFilterType, setLogFilterType] = useState<string>('all');
   const [logSearchQuery, setLogSearchQuery] = useState<string>('');
+  const [logActorFilter, setLogActorFilter] = useState<'all' | 'admin' | 'agent'>('all');
+  const [logPage, setLogPage] = useState<number>(1);
+  const [logPerPage, setLogPerPage] = useState<number>(15);
   const [selectedLogForDetails, setSelectedLogForDetails] = useState<ActivityLog | null>(null);
 
   const headers = {
@@ -126,10 +146,15 @@ export default function AdminPortal({ adminPassword, onLogout }: AdminPortalProp
   const fetchStats = async () => {
     try {
       setLoadingStats(true);
-      const res = await fetch('/api/admin/stats', { headers });
-      if (res.ok) {
-        const data = await res.json();
-        setStats(data);
+      const baseStats = await getStats(adminPassword);
+      if (isServerlessMode) {
+        const logs = await getLogs(adminPassword);
+        setStats({
+          ...baseStats,
+          recentLogs: logs as ActivityLog[]
+        });
+      } else {
+        setStats(baseStats);
       }
     } catch (err) {
       console.error('Error fetching stats:', err);
@@ -141,11 +166,8 @@ export default function AdminPortal({ adminPassword, onLogout }: AdminPortalProp
   const fetchAgents = async () => {
     try {
       setLoadingAgents(true);
-      const res = await fetch('/api/admin/agents', { headers });
-      if (res.ok) {
-        const data = await res.json();
-        setAgents(data);
-      }
+      const data = await getAgents(adminPassword);
+      setAgents(data);
     } catch (err) {
       console.error('Error fetching agents:', err);
     } finally {
@@ -156,11 +178,8 @@ export default function AdminPortal({ adminPassword, onLogout }: AdminPortalProp
   const fetchApks = async () => {
     try {
       setLoadingApks(true);
-      const res = await fetch('/api/apks');
-      if (res.ok) {
-        const data = await res.json();
-        setApks(data);
-      }
+      const data = await getApks(true, adminPassword);
+      setApks(data);
     } catch (err) {
       console.error('Error fetching APKs:', err);
     } finally {
@@ -171,11 +190,8 @@ export default function AdminPortal({ adminPassword, onLogout }: AdminPortalProp
   const fetchUpdates = async () => {
     try {
       setLoadingUpdates(true);
-      const res = await fetch('/api/system-updates');
-      if (res.ok) {
-        const data = await res.json();
-        setSystemUpdates(data);
-      }
+      const data = await getSystemUpdates();
+      setSystemUpdates(data);
     } catch (err) {
       console.error('Error fetching updates:', err);
     } finally {
@@ -184,6 +200,21 @@ export default function AdminPortal({ adminPassword, onLogout }: AdminPortalProp
   };
 
   const fetchSupabaseStatus = async () => {
+    if (isServerlessMode) {
+      setSupabaseStatus({
+        status: {
+          connected: true,
+          agents: true,
+          apks: true,
+          logs: true,
+          systemUpdates: true,
+          lastSyncTime: new Date().toISOString(),
+          syncError: null
+        },
+        schemaSql: `-- Connected directly via VITE_SUPABASE_URL.\n-- No middle server running, true serverless BaaS architecture!`
+      });
+      return;
+    }
     try {
       setLoadingSupabase(true);
       const res = await fetch('/api/admin/supabase-status', {
@@ -238,6 +269,11 @@ export default function AdminPortal({ adminPassword, onLogout }: AdminPortalProp
     setAgentPage(1);
   }, [agentSearch]);
 
+  // Reset log page when log search or filters change
+  useEffect(() => {
+    setLogPage(1);
+  }, [logSearchQuery, logFilterType, logActorFilter]);
+
   // Agent CRUD triggers
   const openAddAgent = () => {
     setEditingAgent(null);
@@ -269,31 +305,62 @@ export default function AdminPortal({ adminPassword, onLogout }: AdminPortalProp
       setSubmittingAgent(true);
       setAgentFormError(null);
 
-      const url = editingAgent ? `/api/admin/agents/${editingAgent.id}` : '/api/admin/agents';
-      const method = editingAgent ? 'PUT' : 'POST';
-
-      const res = await fetch(url, {
-        method,
-        headers,
-        body: JSON.stringify({
-          code: agentForm.code.trim().toUpperCase(),
-          name: agentForm.name.trim(),
-          phone: agentForm.phone.trim(),
-          status: agentForm.status
-        })
-      });
-
-      const data = await res.json();
-      if (res.ok) {
+      if (isServerlessMode) {
+        const { supabaseClient } = await import('../apiClient');
+        if (editingAgent) {
+          const { error } = await supabaseClient!
+            .from('agents')
+            .update({
+              code: agentForm.code.trim().toUpperCase(),
+              name: agentForm.name.trim(),
+              phone: agentForm.phone.trim(),
+              status: agentForm.status
+            })
+            .eq('id', editingAgent.id);
+          if (error) throw error;
+        } else {
+          const { error } = await supabaseClient!
+            .from('agents')
+            .insert({
+              id: 'agent-' + Date.now(),
+              code: agentForm.code.trim().toUpperCase(),
+              name: agentForm.name.trim(),
+              phone: agentForm.phone.trim(),
+              status: agentForm.status,
+              createdAt: new Date().toISOString()
+            });
+          if (error) throw error;
+        }
         setShowAgentModal(false);
         fetchAgents();
         fetchStats();
       } else {
-        setAgentFormError(data.error || 'Failed to persist agent details.');
+        const url = editingAgent ? `/api/admin/agents/${editingAgent.id}` : '/api/admin/agents';
+        const method = editingAgent ? 'PUT' : 'POST';
+
+        const res = await fetch(url, {
+          method,
+          headers,
+          body: JSON.stringify({
+            code: agentForm.code.trim().toUpperCase(),
+            name: agentForm.name.trim(),
+            phone: agentForm.phone.trim(),
+            status: agentForm.status
+          })
+        });
+
+        const data = await res.json();
+        if (res.ok) {
+          setShowAgentModal(false);
+          fetchAgents();
+          fetchStats();
+        } else {
+          setAgentFormError(data.error || 'Failed to persist agent details.');
+        }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Agent submit error:', err);
-      setAgentFormError('Connection timeout to master gateway.');
+      setAgentFormError(err?.message || 'Connection timeout to master gateway.');
     } finally {
       setSubmittingAgent(false);
     }
@@ -305,20 +372,27 @@ export default function AdminPortal({ adminPassword, onLogout }: AdminPortalProp
     }
 
     try {
-      const res = await fetch(`/api/admin/agents/${id}`, {
-        method: 'DELETE',
-        headers
-      });
-
-      if (res.ok) {
+      if (isServerlessMode) {
+        await deleteAgent(id, name, adminPassword);
         fetchAgents();
         fetchStats();
       } else {
-        const errData = await res.json();
-        alert(errData.error || 'Error during operational deletion.');
+        const res = await fetch(`/api/admin/agents/${id}`, {
+          method: 'DELETE',
+          headers
+        });
+
+        if (res.ok) {
+          fetchAgents();
+          fetchStats();
+        } else {
+          const errData = await res.json();
+          alert(errData.error || 'Error during operational deletion.');
+        }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error deleting agent:', err);
+      alert(err?.message || 'Error deleting agent');
     }
   };
 
@@ -336,6 +410,81 @@ export default function AdminPortal({ adminPassword, onLogout }: AdminPortalProp
     try {
       setImporting(true);
       setImportResult(null);
+
+      if (isServerlessMode) {
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+          try {
+            const data = new Uint8Array(e.target?.result as ArrayBuffer);
+            const { read, utils } = await import('xlsx');
+            const workbook = read(data, { type: 'array' });
+            const firstSheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[firstSheetName];
+            const jsonData = utils.sheet_to_json<any>(worksheet);
+
+            let createdCount = 0;
+            let updatedCount = 0;
+
+            const { supabaseClient } = await import('../apiClient');
+
+            for (const row of jsonData) {
+              const code = (row.agentCode || row.code || row.AgentCode || row.Agent_Code || '').toString().trim().toUpperCase();
+              const name = (row.agentName || row.name || row.AgentName || row.Name || '').toString().trim();
+              const phone = (row.agentPhone || row.phone || row.AgentPhone || row.Phone || '').toString().trim();
+
+              if (!code || !phone) continue;
+
+              const { data: existingAgent } = await supabaseClient!
+                .from('agents')
+                .select('id')
+                .eq('code', code)
+                .maybeSingle();
+
+              if (existingAgent) {
+                const { error } = await supabaseClient!
+                  .from('agents')
+                  .update({ name, phone })
+                  .eq('id', existingAgent.id);
+                if (!error) updatedCount++;
+              } else {
+                const { error } = await supabaseClient!
+                  .from('agents')
+                  .insert({
+                    id: 'agent-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+                    code,
+                    name,
+                    phone,
+                    status: 'active',
+                    createdAt: new Date().toISOString()
+                  });
+                if (!error) createdCount++;
+              }
+            }
+
+            setImportResult({
+              success: true,
+              createdCount,
+              updatedCount
+            });
+            setSpreadsheetFile(null);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+            fetchAgents();
+            fetchStats();
+          } catch (err: any) {
+            console.error('Failed to parse client-side excel:', err);
+            setImportResult({
+              success: false,
+              createdCount: 0,
+              updatedCount: 0,
+              error: err?.message || 'Spreadsheet parsing error. Ensure the format is valid.'
+            });
+          } finally {
+            setImporting(false);
+          }
+        };
+        reader.readAsArrayBuffer(spreadsheetFile);
+        return;
+      }
 
       const formData = new FormData();
       formData.append('file', spreadsheetFile);
@@ -373,10 +522,12 @@ export default function AdminPortal({ adminPassword, onLogout }: AdminPortalProp
         success: false,
         createdCount: 0,
         updatedCount: 0,
-        error: 'Network transport failure. Check server telemetry.'
+        error: err?.message || 'Network transport failure. Check server telemetry.'
       });
     } finally {
-      setImporting(false);
+      if (!isServerlessMode) {
+        setImporting(false);
+      }
     }
   };
 
@@ -431,29 +582,17 @@ export default function AdminPortal({ adminPassword, onLogout }: AdminPortalProp
       formData.append('description', apkForm.description.trim());
       formData.append('allowOldVersions', String(apkForm.allowOldVersions));
 
-      const res = await fetch('/api/admin/apks', {
-        method: 'POST',
-        headers: {
-          'x-admin-password': adminPassword,
-          'Authorization': `Bearer ${adminPassword}`
-        },
-        body: formData
-      });
+      await addApk(formData, adminPassword);
 
-      if (res.ok) {
-        setShowApkModal(false);
-        setApkFile(null);
-        setApkForm({ name: '', version: '', description: '', allowOldVersions: true });
-        if (apkFileInputRef.current) apkFileInputRef.current.value = '';
-        fetchApks();
-        fetchStats();
-      } else {
-        const errData = await res.json();
-        setApkFormError(errData.error || 'Secure upload rejected by filesystem.');
-      }
-    } catch (err) {
+      setShowApkModal(false);
+      setApkFile(null);
+      setApkForm({ name: '', version: '', description: '', allowOldVersions: true });
+      if (apkFileInputRef.current) apkFileInputRef.current.value = '';
+      fetchApks();
+      fetchStats();
+    } catch (err: any) {
       console.error('APK upload failed:', err);
-      setApkFormError('Connection lost during transmission block.');
+      setApkFormError(err?.message || 'Connection lost during transmission block.');
     } finally {
       setUploadingApk(false);
     }
@@ -465,41 +604,23 @@ export default function AdminPortal({ adminPassword, onLogout }: AdminPortalProp
     }
 
     try {
-      const res = await fetch(`/api/admin/apks/${id}`, {
-        method: 'DELETE',
-        headers
-      });
-
-      if (res.ok) {
-        fetchApks();
-        fetchStats();
-      } else {
-        const errData = await res.json();
-        alert(errData.error || 'Failed to delete APK.');
-      }
-    } catch (err) {
+      await deleteApk(id, name, adminPassword);
+      fetchApks();
+      fetchStats();
+    } catch (err: any) {
       console.error('Error deleting APK:', err);
+      alert(err?.message || 'Failed to delete APK.');
     }
   };
 
   const handleToggleApkStatus = async (id: string, currentStatus?: 'active' | 'inactive') => {
-    const nextStatus = currentStatus === 'inactive' ? 'active' : 'inactive';
     try {
-      const res = await fetch(`/api/admin/apks/${id}/status`, {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify({ status: nextStatus })
-      });
-
-      if (res.ok) {
-        fetchApks();
-        fetchStats();
-      } else {
-        const errData = await res.json();
-        alert(errData.error || 'Failed to update APK status.');
-      }
-    } catch (err) {
+      await toggleApkStatus(id, currentStatus, adminPassword);
+      fetchApks();
+      fetchStats();
+    } catch (err: any) {
       console.error('Error toggling APK status:', err);
+      alert(err?.message || 'Failed to update APK status.');
     }
   };
 
@@ -515,23 +636,19 @@ export default function AdminPortal({ adminPassword, onLogout }: AdminPortalProp
       setPostingAnnouncement(true);
       setAnnouncementError(null);
 
-      const res = await fetch('/api/admin/system-updates', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(updateForm)
-      });
+      await addSystemUpdate(
+        updateForm.title.trim(),
+        updateForm.description.trim(),
+        updateForm.version.trim(),
+        adminPassword
+      );
 
-      if (res.ok) {
-        setUpdateForm({ title: '', description: '', version: '' });
-        fetchUpdates();
-        fetchStats();
-      } else {
-        const errData = await res.json();
-        setAnnouncementError(errData.error || 'Failed to post announcement.');
-      }
-    } catch (err) {
+      setUpdateForm({ title: '', description: '', version: '' });
+      fetchUpdates();
+      fetchStats();
+    } catch (err: any) {
       console.error('Announcement submit error:', err);
-      setAnnouncementError('Server connection error.');
+      setAnnouncementError(err?.message || 'Server connection error.');
     } finally {
       setPostingAnnouncement(false);
     }
@@ -543,18 +660,11 @@ export default function AdminPortal({ adminPassword, onLogout }: AdminPortalProp
     }
 
     try {
-      const res = await fetch(`/api/admin/system-updates/${id}`, {
-        method: 'DELETE',
-        headers
-      });
-
-      if (res.ok) {
-        fetchUpdates();
-      } else {
-        alert('Failed to retract notice.');
-      }
-    } catch (err) {
+      await deleteSystemUpdate(id, adminPassword);
+      fetchUpdates();
+    } catch (err: any) {
       console.error('Announcement deletion error:', err);
+      alert(err?.message || 'Failed to retract notice.');
     }
   };
 
@@ -565,7 +675,15 @@ export default function AdminPortal({ adminPassword, onLogout }: AdminPortalProp
   });
 
   const filteredLogs = (stats?.recentLogs || []).filter(log => {
-    // 1. Type Filter
+    // 1. Role / Actor Filter (Admin vs User/Agent)
+    if (logActorFilter !== 'all') {
+      const isAdminType = log.type.startsWith('apk_') || log.type.startsWith('agent_') || log.type.startsWith('system_') || log.type.includes('admin') || log.type === 'clear_logs';
+      const isAgentType = log.type === 'download' || log.type === 'login_success' || log.type === 'login_failed';
+      if (logActorFilter === 'admin' && !isAdminType) return false;
+      if (logActorFilter === 'agent' && !isAgentType) return false;
+    }
+
+    // 2. Type Filter
     if (logFilterType !== 'all') {
       if (logFilterType === 'login' && !log.type.startsWith('login')) return false;
       if (logFilterType === 'download' && log.type !== 'download') return false;
@@ -573,7 +691,7 @@ export default function AdminPortal({ adminPassword, onLogout }: AdminPortalProp
       if (logFilterType === 'apk_crud' && !log.type.startsWith('apk_')) return false;
     }
 
-    // 2. Search Query Filter
+    // 3. Search Query Filter
     if (logSearchQuery.trim()) {
       const q = logSearchQuery.toLowerCase();
       const matchDetails = log.details.toLowerCase().includes(q);
@@ -589,6 +707,9 @@ export default function AdminPortal({ adminPassword, onLogout }: AdminPortalProp
   // pagination slicing
   const totalAgentPages = Math.ceil(filteredAgents.length / agentPerPage) || 1;
   const paginatedAgents = filteredAgents.slice((agentPage - 1) * agentPerPage, agentPage * agentPerPage);
+
+  const totalLogPages = Math.ceil(filteredLogs.length / logPerPage) || 1;
+  const paginatedLogs = filteredLogs.slice((logPage - 1) * logPerPage, logPage * logPerPage);
 
   // CSV Export for Logs
   const exportLogsToCsv = () => {

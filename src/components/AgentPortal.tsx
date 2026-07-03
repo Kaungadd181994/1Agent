@@ -10,6 +10,7 @@ import {
   Smartphone
 } from 'lucide-react';
 import { Agent, ApkFile } from '../types';
+import { getApks, downloadApkFile, isServerlessMode } from '../apiClient';
 
 interface AgentPortalProps {
   agent: Agent;
@@ -26,16 +27,11 @@ export default function AgentPortal({ agent, onLogout }: AgentPortalProps) {
     try {
       setLoadingApks(true);
       setError(null);
-      const res = await fetch('/api/apks');
-      if (res.ok) {
-        const data = await res.json();
-        setApks(data);
-      } else {
-        setError('Unable to query secure binaries from server.');
-      }
-    } catch (err) {
+      const data = await getApks();
+      setApks(data);
+    } catch (err: any) {
       console.error('Error fetching APKs:', err);
-      setError('Connection failed. Please check your network and try again.');
+      setError(err?.message || 'Connection failed. Please check your network and try again.');
     } finally {
       setLoadingApks(false);
     }
@@ -50,15 +46,7 @@ export default function AgentPortal({ agent, onLogout }: AgentPortalProps) {
       setDownloadingId(apk.id);
       setError(null);
 
-      // Create download URL
-      const downloadUrl = `/api/apks/${apk.id}/download?agentCode=${encodeURIComponent(agent.code)}&phone=${encodeURIComponent(agent.phone)}`;
-      
-      const link = document.createElement('a');
-      link.href = downloadUrl;
-      link.setAttribute('download', apk.filename);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      await downloadApkFile(apk, agent);
 
       // Simulate download connection handshake
       setTimeout(() => {

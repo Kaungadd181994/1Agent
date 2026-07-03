@@ -14,6 +14,7 @@ import {
 import AgentPortal from './components/AgentPortal';
 import AdminPortal from './components/AdminPortal';
 import { Agent } from './types';
+import { loginAgent, loginAdmin, isServerlessMode } from './apiClient';
 
 type ScreenState = 'agent_login' | 'admin_login' | 'agent_dashboard' | 'admin_dashboard';
 
@@ -63,19 +64,9 @@ export default function App() {
     }
   }, []);
 
-  // Handler for hidden admin entry (click the Smartphone icon or title 5 times)
+  // Handler for hidden admin entry (removed click trigger to avoid accidental entry)
   const handleTitleClick = () => {
-    setAdminClicks(prev => {
-      const next = prev + 1;
-      if (next >= 5) {
-        setShowAdminSecretLink(true);
-        setAdminError(null);
-        setAdminPassword('');
-        setScreen('admin_login');
-        return 0;
-      }
-      return next;
-    });
+    // Left empty or disabled to remove the click trigger as requested
   };
 
   // Handlers
@@ -90,28 +81,17 @@ export default function App() {
       setAuthenticatingAgent(true);
       setAgentError(null);
 
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          agentCode: agentCode.trim(),
-          phone: phone.trim()
-        })
-      });
-
-      const data = await res.json();
-      if (res.ok && data.success) {
+      const data = await loginAgent(agentCode.trim(), phone.trim());
+      if (data.success) {
         setActiveAgent(data.agent);
         localStorage.setItem('active_agent', JSON.stringify(data.agent));
         setScreen('agent_dashboard');
       } else {
-        setAgentError(data.error || 'Authentication failed. Please verify credentials.');
+        setAgentError('Authentication failed. Please verify credentials.');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Agent login failed', err);
-      setAgentError('Server connection timeout. Verify the backend is online and try again.');
+      setAgentError(err?.message || 'Server connection timeout. Verify the backend is online and try again.');
     } finally {
       setAuthenticatingAgent(false);
     }
@@ -128,30 +108,19 @@ export default function App() {
       setAuthenticatingAdmin(true);
       setAdminError(null);
 
-      const res = await fetch('/api/admin/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          email: adminEmail.trim(),
-          password: adminPassword
-        })
-      });
-
-      const data = await res.json();
-      if (res.ok && data.success) {
+      const data = await loginAdmin(adminPassword);
+      if (data.success) {
         setIsLoggedAdmin(true);
         const sessionToken = data.token || adminPassword;
         setAdminPassword(sessionToken);
         localStorage.setItem('admin_session', sessionToken);
         setScreen('admin_dashboard');
       } else {
-        setAdminError(data.error || 'Invalid credentials or failed to verify admin session.');
+        setAdminError('Invalid credentials or failed to verify admin session.');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Admin verification failed', err);
-      setAdminError('Failed to communicate with authorization server.');
+      setAdminError(err?.message || 'Failed to communicate with authorization server.');
     } finally {
       setAuthenticatingAdmin(false);
     }
@@ -179,53 +148,50 @@ export default function App() {
       <div className="flex-1 flex flex-col w-full">
         <AnimatePresence mode="wait">
           
-          {/* 1. AGENT LOGIN VIEW (Mobile First design, Flat base, No Shadows) */}
+          {/* 1. AGENT LOGIN VIEW (Flat base, Confluence Mimicry, No Shadows) */}
           {screen === 'agent_login' && (
             <motion.div
               key="agent_login_screen"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="flex-1 flex items-center justify-center p-0 sm:p-4 bg-[#F0F2F5]"
+              transition={{ duration: 0.1 }}
+              className="flex-1 flex items-center justify-center p-0 sm:p-4 bg-[#F4F5F7]"
             >
-              <div className="bg-white border-0 sm:border border-[#e4e6eb] shadow-sm sm:rounded-2xl p-6 sm:p-10 w-full max-w-md relative overflow-hidden flex flex-col min-h-screen sm:min-h-0 justify-center">
+              <div className="bg-white border-0 sm:border border-[#DFE1E6] w-full max-w-md p-6 sm:p-10 relative overflow-hidden flex flex-col min-h-screen sm:min-h-0 justify-center rounded-md">
                 
                 <div className="text-center mb-8">
-                  {/* Subtle interactive trigger: Clicking the icon 5 times reveals Admin Login */}
                   <div 
-                    onClick={handleTitleClick}
-                    className="mx-auto bg-[#e7f3ff] text-[#1877F2] w-14 h-14 rounded-2xl flex items-center justify-center mb-5 border border-transparent cursor-pointer active:scale-95 transition-transform"
-                    title="Agent secure key"
+                    className="mx-auto bg-[#DEEBFF] text-[#0052CC] w-12 h-12 rounded flex items-center justify-center mb-5 border border-transparent"
+                    title="Authorized Downloads Only"
                   >
-                    <Smartphone size={24} />
+                    <Smartphone size={22} />
                   </div>
                   <h2 
-                    onClick={handleTitleClick}
-                    className="font-sans font-bold text-2xl tracking-tight text-[#1c1e21] cursor-pointer select-none"
+                    className="font-display font-bold text-xl tracking-tight text-[#172B4D] select-none"
                   >
-                    Agent Portal
+                    App Download Portal
                   </h2>
-                  <p className="text-sm text-[#65676b] mt-2 leading-relaxed">
-                    Log in with your Agent Code and verified phone number to manage and download application versions.
+                  <p className="text-xs text-[#5E6C84] mt-2 leading-relaxed">
+                    Enter your Code and registered phone number to verify access and download the official application binaries.
                   </p>
                 </div>
 
                 {agentError && (
-                  <div className="mb-6 p-4 bg-[#ffebe9] border border-[#ffc4c0] text-[#b30000] text-xs rounded-xl flex items-start space-x-2">
-                    <AlertCircle size={16} className="shrink-0 mt-0.5 text-[#ff4d4d]" />
+                  <div className="mb-6 p-3.5 bg-[#FFEBE6] border border-[#FF8F73] text-[#BF2600] text-xs rounded flex items-start space-x-2">
+                    <AlertCircle size={15} className="shrink-0 mt-0.5 text-[#DE350B]" />
                     <span className="leading-normal font-medium">{agentError}</span>
                   </div>
                 )}
 
                 <form onSubmit={handleAgentLoginSubmit} className="space-y-4">
                   <div>
-                    <label htmlFor="agent-code-input" className="block text-xs font-bold text-[#65676b] uppercase tracking-wider mb-1.5">
-                      Agent Code
+                    <label htmlFor="agent-code-input" className="block text-[11px] font-bold text-[#5E6C84] uppercase tracking-wider mb-1.5">
+                      User Code
                     </label>
                     <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#65676b]">
-                        <KeyRound size={16} />
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[#5E6C84]">
+                        <KeyRound size={14} />
                       </div>
                       <input
                         id="agent-code-input"
@@ -233,19 +199,19 @@ export default function App() {
                         placeholder="e.g., AGT001"
                         value={agentCode}
                         onChange={(e) => setAgentCode(e.target.value)}
-                        className="pl-10 w-full px-3.5 py-2.5 bg-[#F0F2F5] border border-[#ccd0d5] text-[#1c1e21] placeholder-[#8d949e] font-bold font-mono uppercase rounded-xl outline-none focus:bg-white focus:border-[#1877F2] focus:ring-1 focus:ring-[#1877F2]/25 transition-all text-sm"
+                        className="pl-9 w-full px-3 py-2 bg-[#FAFBFC] border border-[#DFE1E6] text-[#172B4D] placeholder-[#A5ADBA] font-bold font-mono uppercase rounded outline-none focus:bg-white focus:border-[#0052CC] transition-all text-xs"
                         autoFocus
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label htmlFor="agent-phone-input" className="block text-xs font-bold text-[#65676b] uppercase tracking-wider mb-1.5">
+                    <label htmlFor="agent-phone-input" className="block text-[11px] font-bold text-[#5E6C84] uppercase tracking-wider mb-1.5">
                       Registered Phone
                     </label>
                     <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#65676b]">
-                        <Phone size={16} />
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[#5E6C84]">
+                        <Phone size={14} />
                       </div>
                       <input
                         id="agent-phone-input"
@@ -253,7 +219,7 @@ export default function App() {
                         placeholder="e.g., 0912345678"
                         value={phone}
                         onChange={(e) => setPhone(e.target.value)}
-                        className="pl-10 w-full px-3.5 py-2.5 bg-[#F0F2F5] border border-[#ccd0d5] text-[#1c1e21] placeholder-[#8d949e] font-bold font-mono rounded-xl outline-none focus:bg-white focus:border-[#1877F2] focus:ring-1 focus:ring-[#1877F2]/25 transition-all text-sm"
+                        className="pl-9 w-full px-3 py-2 bg-[#FAFBFC] border border-[#DFE1E6] text-[#172B4D] placeholder-[#A5ADBA] font-bold font-mono rounded outline-none focus:bg-white focus:border-[#0052CC] transition-all text-xs"
                       />
                     </div>
                   </div>
@@ -262,18 +228,18 @@ export default function App() {
                     type="submit"
                     id="btn-agent-login-submit"
                     disabled={authenticatingAgent}
-                    className="w-full flex items-center justify-center space-x-2 py-3 mt-4 rounded-xl text-sm font-bold text-white bg-[#1877F2] hover:bg-[#166FE5] transition-all cursor-pointer shadow-none active:scale-98"
+                    className="w-full flex items-center justify-center space-x-1.5 py-2.5 mt-4 rounded text-xs font-bold text-white bg-[#0052CC] hover:bg-[#0065FF] active:bg-[#0747A6] transition-colors cursor-pointer shadow-none"
                   >
                     {authenticatingAgent ? (
                       <>
-                        <RefreshCw size={16} className="animate-spin text-white" />
-                        <span>Verifying Authorization...</span>
+                        <RefreshCw size={13} className="animate-spin text-white" />
+                        <span>Verifying Authority...</span>
                       </>
                     ) : (
                       <>
-                        <LogIn size={16} />
-                        <span>Log In</span>
-                        <ArrowRight size={15} />
+                        <LogIn size={13} />
+                        <span>Access Download Files</span>
+                        <ArrowRight size={12} />
                       </>
                     )}
                   </button>
@@ -281,7 +247,7 @@ export default function App() {
 
                 {/* Secure/Hidden operational entry link. Only shown if showAdminSecretLink is true */}
                 {showAdminSecretLink && (
-                  <div className="mt-8 pt-6 border-t border-[#e4e6eb] text-center animate-fade-in">
+                  <div className="mt-8 pt-6 border-t border-[#DFE1E6] text-center">
                     <button
                       id="link-admin-panel"
                       onClick={() => {
@@ -289,10 +255,10 @@ export default function App() {
                         setAdminPassword('');
                         setScreen('admin_login');
                       }}
-                      className="inline-flex items-center space-x-1.5 text-xs text-[#65676b] hover:text-[#1877F2] font-semibold transition-colors group"
+                      className="inline-flex items-center space-x-1.5 text-xs text-[#5E6C84] hover:text-[#0052CC] font-semibold transition-colors group"
                     >
-                      <Lock size={12} className="group-hover:text-[#1877F2]" />
-                      <span>Access Administrative Settings</span>
+                      <Lock size={12} className="group-hover:text-[#0052CC]" />
+                      <span>Access Administrative Dashboard</span>
                     </button>
                   </div>
                 )}
